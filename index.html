@@ -6,9 +6,9 @@
 <style>
   *{box-sizing:border-box}body{margin:0;background:#121212;color:#f5f5f5;font:16px system-ui,sans-serif}
   main{min-height:100dvh;padding:24px}section{width:min(100%,760px);margin:auto;text-align:center}#setup{min-height:calc(100dvh - 48px);display:grid;place-content:center}
-  h1{font-size:1.5rem;margin:0 0 12px}p{color:#bbb;line-height:1.45}button,label{display:inline-block;border:0;border-radius:999px;padding:13px 20px;background:#fff;color:#111;font:inherit;font-weight:650;cursor:pointer}label input{display:none}#reader{display:none;width:100%}#name{margin:0 0 12px;font-size:.9rem;color:#aaa;overflow-wrap:anywhere}.pdf-page{margin:0 auto 18px;background:#fff;box-shadow:0 4px 24px #0008}.pdf-page canvas{display:block;width:100%;height:100%}#reset{margin:20px auto;display:block;background:transparent;color:#ddd;border:1px solid #555;padding:9px 15px;font-size:.9rem}#status{min-height:1.5em}
+  h1{font-size:1.5rem;margin:0 0 12px}p{color:#bbb;line-height:1.45}button,label{display:inline-block;border:0;border-radius:999px;padding:13px 20px;background:#fff;color:#111;font:inherit;font-weight:650;cursor:pointer}label input{display:none}#reader{display:none;width:100%}#name{margin:0 0 12px;font-size:.9rem;color:#aaa;overflow-wrap:anywhere}.pdf-page{margin:0 auto 18px;background:#fff;box-shadow:0 4px 24px #0008}.pdf-page canvas{display:block;width:100%;height:100%}#controls{display:flex;justify-content:center;flex-wrap:wrap;gap:10px;margin:20px auto}#controls button{margin:0;background:transparent;color:#ddd;border:1px solid #555;padding:9px 15px;font-size:.9rem}#war-mode[aria-pressed="true"]{border-color:#fff;color:#fff}#status{min-height:1.5em}
 </style>
-<main><section id="setup"><h1>Random Chapter</h1><p id="status">Choose a PDF to get started.</p><label>Choose PDF<input id="picker" type="file" accept="application/pdf"></label></section><section id="reader"><p id="name"></p><div id="pages"></div><button id="reset">Reset PDF</button></section></main>
+<main><section id="setup"><h1>Random Chapter</h1><p id="status">Choose a PDF to get started.</p><label>Choose PDF<input id="picker" type="file" accept="application/pdf"></label></section><section id="reader"><p id="name"></p><div id="pages"></div><div id="controls"><button id="war-mode" type="button"></button><button id="reset" type="button">Reset PDF</button></div></section></main>
 <script>
   if(location.protocol==='file:'){document.querySelector('#status').textContent='Open this app from its HTTPS link, not directly from a downloaded file.';document.querySelector('#picker').closest('label').hidden=true}
 </script>
@@ -16,7 +16,11 @@
   import * as pdfjsLib from './pdf.min.mjs';
   pdfjsLib.GlobalWorkerOptions.workerSrc = './pdf.worker.min.mjs';
 
-  const setup=document.querySelector('#setup'), reader=document.querySelector('#reader'), picker=document.querySelector('#picker'), status=document.querySelector('#status'), name=document.querySelector('#name'), pagesContainer=document.querySelector('#pages');
+  const setup=document.querySelector('#setup'), reader=document.querySelector('#reader'), picker=document.querySelector('#picker'), status=document.querySelector('#status'), name=document.querySelector('#name'), pagesContainer=document.querySelector('#pages'), warButton=document.querySelector('#war-mode');
+  const warPages=[13,15,16,22,24,25,26,27,28,29,30,31,32,33,34,35,36,38,39,40,41,42,43,44,46,47,48,50,55,56,57,59,60,61,63,65,68,70,72,74,77,79,80,83,84,88,90,92,93,94,95,96,97,98,99,100,101,102,104,106,109,110,111,112,114,115,116,119,121,123,126,129,132,135,138,141,145,149,152,155,158,160,161,163,165,167,169,171,173,174,176,177];
+  let warMode=localStorage.getItem('war-mode')!=='false';
+  function showWarMode(){warButton.textContent=`${warMode?'☑':'☐'} The War of Art chapter mode`;warButton.setAttribute('aria-pressed',warMode)}
+  showWarMode();
   const openDB=()=>new Promise((resolve,reject)=>{const r=indexedDB.open('random-chapter',1);r.onupgradeneeded=()=>r.result.createObjectStore('pdf');r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)});
   async function read(){const db=await openDB();return new Promise((resolve,reject)=>{const r=db.transaction('pdf').objectStore('pdf').get('current');r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)})}
   async function write(value){const db=await openDB();return new Promise((resolve,reject)=>{const r=db.transaction('pdf','readwrite').objectStore('pdf').put(value,'current');r.onsuccess=()=>resolve();r.onerror=()=>reject(r.error)})}
@@ -30,10 +34,12 @@
   async function render(blob,pages,fileName){
     const bytes=new Uint8Array(await blob.arrayBuffer());
     const pdf=await pdfjsLib.getDocument({data:bytes}).promise;
-    if(!pages?.length) pages=await bookmarkPages(pdf);
-    if(!pages.length) pages=Array.from({length:pdf.numPages},(_,i)=>i+1);
-    const selected=pages[Math.floor(Math.random()*pages.length)], width=Math.min(720,innerWidth-48), ratio=Math.min(devicePixelRatio||1,2), holders=[];
-    name.textContent=`${fileName} — ${pages.length===pdf.numPages?'random page':'random bookmarked chapter'} (page ${selected})`;
+    let standardPages=pages;
+    if(!standardPages?.length) standardPages=await bookmarkPages(pdf);
+    if(!standardPages.length) standardPages=Array.from({length:pdf.numPages},(_,i)=>i+1);
+    const choices=warMode?warPages.filter(n=>n<=pdf.numPages):standardPages;
+    const selected=choices[Math.floor(Math.random()*choices.length)], width=Math.min(720,innerWidth-48), ratio=Math.min(devicePixelRatio||1,2), holders=[];
+    name.textContent=`${fileName} — ${warMode?'The War of Art chapter mode':choices.length===pdf.numPages?'random page':'random bookmarked chapter'} (page ${selected})`;
     setup.style.display='none';reader.style.display='block';
     pagesContainer.replaceChildren();
     for(let n=1;n<=pdf.numPages;n++){
@@ -45,9 +51,10 @@
     const observer=new IntersectionObserver(entries=>entries.forEach(entry=>{if(entry.isIntersecting)draw(Number(entry.target.dataset.page))}),{rootMargin:'900px 0px'});
     holders.slice(1).forEach(({holder})=>observer.observe(holder));
     requestAnimationFrame(()=>holders[selected].holder.scrollIntoView({block:'start'}));
-    return {pages};
+    return {pages:standardPages};
   }
   picker.onchange=async()=>{const file=picker.files[0];if(!file)return;try{status.textContent='Finding chapters…';const result=await render(file,[],file.name);await write({blob:file,name:file.name,pages:result.pages});navigator.storage?.persist?.()}catch(error){status.textContent=`Could not open this PDF: ${error.message}`}};
+  warButton.onclick=()=>{warMode=!warMode;localStorage.setItem('war-mode',warMode);location.reload()};
   document.querySelector('#reset').onclick=async()=>{await clear();reader.style.display='none';setup.style.display='block';status.textContent='Choose a PDF to get started.';picker.value=''};
   try{const saved=await read();if(saved)await render(saved.blob,saved.pages,saved.name)}catch(error){status.textContent=`Storage is unavailable: ${error.message}`}
 </script>
